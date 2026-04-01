@@ -24,7 +24,6 @@ source_channels = [
     "@mmirleb",
     "@manarbreaking",
     "@media_operations_center",
-    "@mehwaralmokawma",
     "@altaifaalmansoora",
     "@StateMediaTeamForums",
     "@muraselon",
