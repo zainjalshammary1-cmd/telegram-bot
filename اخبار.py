@@ -8,7 +8,7 @@ import re
 # ----------- إعدادات -----------
 
 CHANNELS = [
-    "@Arash_Insight"
+    "@Arash_Insight",
     "@shabab_alislam",
 ]
 
