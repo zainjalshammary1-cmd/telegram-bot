@@ -8,7 +8,8 @@ import re
 # ----------- إعدادات -----------
 
 CHANNELS = [
-    "@Arash_Insight",
+    "@Arash_Insight"
+    "@shabab_alislam",
 ]
 
 api_id = 30540427
