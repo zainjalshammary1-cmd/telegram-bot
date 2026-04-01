@@ -9,7 +9,6 @@ import re
 
 CHANNELS = [
     "@Arash_Insight",
-    "@shabab_alislam",
 ]
 
 api_id = 30540427
