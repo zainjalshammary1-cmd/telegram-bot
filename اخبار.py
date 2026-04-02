@@ -4,7 +4,7 @@ asyncio.set_event_loop(asyncio.new_event_loop())
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from deep_translator import GoogleTranslator
-from openai import OpenAI
+import google.generativeai as genai
 import re
 import hashlib
 import os
@@ -15,7 +15,7 @@ api_id = 30540427
 api_hash = "eaa19d4ac276f691b14618bdf917b5c8"
 
 SESSION = os.getenv("SESSION")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 CHANNELS = ["@Arash_Insight"]
 
@@ -31,8 +31,21 @@ source_channels = [
     "@muraselon"
 ]
 
+# ----------- التحقق من المتغيرات -----------
+
+if not SESSION:
+    raise ValueError("SESSION is missing")
+if not GEMINI_API_KEY:
+    raise ValueError("GEMINI_API_KEY is missing")
+
+# ----------- تشغيل Gemini -----------
+
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel("gemini-1.5-flash")
+
+# ----------- تشغيل تيليغرام -----------
+
 client = TelegramClient(StringSession(SESSION), api_id, api_hash)
-ai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 sent_messages = set()
 
@@ -62,20 +75,24 @@ def clean_text(text):
 
 # ----------- ترجمة -----------
 
-def translate_if_persian(text):
+def translate_if_needed(text):
     try:
+        if not text.strip():
+            return text
+
+        # إذا النص ليس عربيًا بالكامل أو فيه أحرف فارسية/مختلطة
         if re.search(r'[\u0600-\u06FF]', text):
-            translated = GoogleTranslator(source='auto', target='ar').translate(text[:1200])
+            translated = GoogleTranslator(source='auto', target='ar').translate(text[:1500])
             if translated and translated.strip():
                 return translated.strip()
     except Exception as e:
         print("❌ Translation Error:", e)
+
     return text
 
 # ----------- إزالة التكرار -----------
 
 def remove_repeated_words(text):
-    # يحذف التكرار المتتالي فقط
     words = text.split()
     if not words:
         return text
@@ -87,90 +104,50 @@ def remove_repeated_words(text):
 
     return " ".join(result)
 
-# ----------- تنظيف خفيف بعد الصياغة -----------
-
 def post_cleanup(text):
     text = re.sub(r'\s+', ' ', text).strip()
-    text = re.sub(r'([،.])\1+', r'\1', text)
+    text = re.sub(r'([،.!؟])\1+', r'\1', text)
     return text
 
-# ----------- 🧠 إعادة الصياغة -----------
+# ----------- إعادة الصياغة -----------
 
 def rewrite_news(text):
     try:
         print("🧠 جاري إعادة الصياغة...")
-        print("📝 قبل الصياغة:", text[:300])
+        print("📝 قبل:", text[:300])
 
         prompt = f"""
-أعد صياغة الخبر التالي بالكامل بصياغة عربية إخبارية جديدة ومختلفة بوضوح.
+أعد صياغة الخبر التالي بالعربية بصياغة إخبارية جديدة ومختلفة بوضوح.
+
 الشروط:
-- غيّر الأسلوب والتراكيب والجمل بشكل واضح
+- غيّر الأسلوب والجمل والتراكيب بشكل واضح
 - حافظ على المعنى فقط
-- لا تنقل الجمل نفسها
-- لا تضف تحليلات أو آراء
-- اجعل النص مختصرًا ومهنيًا
-- لا تكرر الكلمات أو العبارات
-- أخرج النص النهائي فقط دون مقدمات
+- لا تنقل النص كما هو
+- لا تضف رأيًا أو تحليلًا
+- اجعل الصياغة مهنية ومختصرة
+- امنع تكرار الكلمات والعبارات
+- أخرج النص النهائي فقط دون شرح
 
 الخبر:
 {text}
 """
 
-        response = ai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "system",
-                    "content": "أنت محرر أخبار عربي محترف، تعيد كتابة الخبر بصياغة جديدة وواضحة ومناسبة للنشر."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            temperature=0.9,
-            max_tokens=300
-        )
+        response = model.generate_content(prompt)
+        result = getattr(response, "text", "") or ""
 
-        result = response.choices[0].message.content.strip()
-
+        result = result.strip()
         if not result:
-            print("⚠️ AI رجّع نصًا فارغًا")
+            print("⚠️ Gemini رجّع نصًا فارغًا")
             return text
 
         result = post_cleanup(result)
+        result = remove_repeated_words(result)
 
-        print("📝 بعد الصياغة:", result[:300])
-
-        # إذا الصياغة شبه الأصل جدًا نرجع نحاول مرة ثانية
-        if normalize_text(result) == normalize_text(text):
-            print("⚠️ الصياغة مطابقة تقريبًا للأصل، إعادة محاولة...")
-            response = ai_client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "أنت محرر أخبار عربي محترف. ممنوع إعادة النص كما هو. يجب تغيير الصياغة بوضوح."
-                    },
-                    {
-                        "role": "user",
-                        "content": f"أعد كتابة هذا الخبر بصياغة مختلفة بشكل واضح جدًا مع الحفاظ على المعنى فقط:\n\n{text}"
-                    }
-                ],
-                temperature=1.0,
-                max_tokens=300
-            )
-
-            second_result = response.choices[0].message.content.strip()
-            if second_result:
-                second_result = post_cleanup(second_result)
-                print("📝 بعد المحاولة الثانية:", second_result[:300])
-                return second_result
-
+        print("📝 بعد:", result[:300])
         return result
 
     except Exception as e:
-        print("❌ AI Error:", e)
+        print("❌ Gemini Error:", e)
         return text
 
 # ----------- المعالج -----------
@@ -184,31 +161,28 @@ async def handler(event):
         print("📥 خبر جديد")
 
         original = event.message.text or event.message.caption or ""
-
         if not original.strip():
-            print("⚠️ لا يوجد نص في الرسالة")
+            print("⚠️ الرسالة بدون نص")
             return
 
-        text = clean_text(original)
-        text = translate_if_persian(text)
-        text = remove_repeated_words(text)
+        cleaned = clean_text(original)
+        translated = translate_if_needed(cleaned)
+        prepared = remove_repeated_words(translated)
 
-        if not text.strip():
+        if not prepared.strip():
             print("⚠️ النص فارغ بعد التنظيف")
             return
 
-        rewritten_text = rewrite_news(text)
+        rewritten = rewrite_news(prepared)
+        rewritten = post_cleanup(rewritten)
+        rewritten = remove_repeated_words(rewritten)
 
-        if not rewritten_text.strip():
+        if not rewritten.strip():
             print("⚠️ النص النهائي فارغ")
             return
 
-        rewritten_text = remove_repeated_words(rewritten_text)
-        rewritten_text = post_cleanup(rewritten_text)
-
-        # منع التكرار اعتمادًا على النص النهائي
-        text_hash = get_text_hash(normalize_text(rewritten_text))
-
+        # منع تكرار النشر
+        text_hash = get_text_hash(normalize_text(rewritten))
         if text_hash in sent_messages:
             print("⚠️ خبر مكرر")
             return
@@ -217,9 +191,9 @@ async def handler(event):
 
         for ch in CHANNELS:
             if event.message.media:
-                await client.send_file(ch, event.message.media, caption=rewritten_text)
+                await client.send_file(ch, event.message.media, caption=rewritten)
             else:
-                await client.send_message(ch, rewritten_text, link_preview=False)
+                await client.send_message(ch, rewritten, link_preview=False)
 
         print("📡 تم النشر")
 
@@ -228,6 +202,6 @@ async def handler(event):
 
 # ----------- تشغيل -----------
 
-print("🚀 البوت شغال (AI + إعادة صياغة فعلية)")
+print("🚀 البوت شغال (Gemini + إعادة صياغة)")
 client.start()
 client.run_until_disconnected()
