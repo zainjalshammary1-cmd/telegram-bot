@@ -6,22 +6,7 @@ from telethon.sessions import StringSession
 from deep_translator import GoogleTranslator
 import re
 import hashlib
-from flask import Flask
-import threading
 import os
-
-# ----------- KEEP ALIVE -----------
-
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "Bot is running"
-
-def run():
-    app.run(host='0.0.0.0', port=8080)
-
-threading.Thread(target=run).start()
 
 # ----------- بيانات -----------
 
@@ -88,55 +73,27 @@ def remove_repeated_words(text):
             result.append(w)
     return " ".join(result)
 
-# ----------- إعادة صياغة احترافية -----------
-
-def rewrite_text(text):
-    if not text:
-        return ""
-
-    text = text.strip()
-
-    urgent_keywords = ["قصف", "انفجار", "هجوم", "اغتيال", "اشتباكات", "صاروخ", "عاجل"]
-
-    is_urgent = any(word in text for word in urgent_keywords)
-
-    if len(text) > 300:
-        text = text[:300]
-
-    if is_urgent:
-        formatted = f"""🚨 عاجل
-
-📍 أفادت مصادر بــ:
-{text}
-
-⏳ التفاصيل قيد المتابعة
-"""
-    else:
-        formatted = f"""📰 متابعة
-
-{text}
-"""
-
-    return formatted.strip()
-
 # ----------- المعالج -----------
 
 @client.on(events.NewMessage(chats=source_channels))
 async def handler(event):
     try:
+        # ❌ تجاهل التعديلات
+        if event.message.edit_date:
+            return
+
         print("📥 خبر جديد")
 
-        text = event.message.text or event.message.caption or ""
+        original = event.message.text or event.message.caption or ""
 
-        text = clean_text(text)
+        text = clean_text(original)
         text = translate_if_persian(text)
         text = remove_repeated_words(text)
-        text = rewrite_text(text)
 
         if not text:
             return
 
-        text_hash = get_text_hash(normalize_text(text))
+        text_hash = get_text_hash(normalize_text(original))
 
         if text_hash in sent_messages:
             print("⚠️ مكرر")
@@ -157,7 +114,7 @@ async def handler(event):
 
 # ----------- تشغيل -----------
 
-print("🚀 Railway bot started")
+print("🚀 bot started")
 
 client.start()
 client.run_until_disconnected()
