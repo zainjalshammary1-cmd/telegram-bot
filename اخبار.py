@@ -4,6 +4,7 @@ asyncio.set_event_loop(asyncio.new_event_loop())
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from deep_translator import GoogleTranslator
+from openai import OpenAI
 import re
 import hashlib
 import os
@@ -14,6 +15,7 @@ api_id = 30540427
 api_hash = "eaa19d4ac276f691b14618bdf917b5c8"
 
 SESSION = os.getenv("SESSION")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 CHANNELS = ["@Arash_Insight"]
 
@@ -29,8 +31,10 @@ source_channels = [
     "@muraselon"
 ]
 
-# ✅ استخدام StringSession الصحيح
+# ----------- تشغيل -----------
+
 client = TelegramClient(StringSession(SESSION), api_id, api_hash)
+ai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 sent_messages = set()
 
@@ -68,11 +72,48 @@ def translate_if_persian(text):
 # ----------- إزالة التكرار -----------
 
 def remove_repeated_words(text):
-    words, result = text.split(), []
+    words = text.split()
+    result = []
+    seen = set()
+
     for w in words:
-        if not result or w != result[-1]:
+        if w not in seen:
             result.append(w)
+            seen.add(w)
+
     return " ".join(result)
+
+# ----------- 🧠 إعادة الصياغة -----------
+
+def rewrite_news(text):
+    try:
+        prompt = f"""
+أعد كتابة الخبر التالي بالكامل بأسلوب جديد ومختلف 100%.
+غير جميع الجمل والتراكيب مع الحفاظ على نفس المعنى.
+اجعله احترافي ومختصر وخالي من التكرار:
+
+{text}
+"""
+
+        response = ai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "أنت محرر أخبار محترف"},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=200
+        )
+
+        result = response.choices[0].message.content.strip()
+
+        if result:
+            return result
+        else:
+            return text
+
+    except Exception as e:
+        print("AI Error:", e)
+        return text
 
 # ----------- المعالج -----------
 
@@ -93,7 +134,11 @@ async def handler(event):
         if not text:
             return
 
-        text_hash = get_text_hash(normalize_text(original))
+        # 🧠 إعادة الصياغة
+        text = rewrite_news(text)
+
+        # 🔁 منع تكرار نفس الخبر
+        text_hash = get_text_hash(normalize_text(text))
 
         if text_hash in sent_messages:
             print("⚠️ مكرر")
@@ -114,7 +159,7 @@ async def handler(event):
 
 # ----------- تشغيل -----------
 
-print("🚀 البوت شغال (نظيف + متعدد القنوات)")
+print("🚀 البوت شغال (AI + بدون تكرار + صياغة جديدة)")
 
 client.start()
 client.run_until_disconnected()
