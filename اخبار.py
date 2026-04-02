@@ -31,8 +31,6 @@ source_channels = [
     "@muraselon"
 ]
 
-# ----------- تشغيل -----------
-
 client = TelegramClient(StringSession(SESSION), api_id, api_hash)
 ai_client = OpenAI(api_key=OPENAI_API_KEY)
 
@@ -41,10 +39,10 @@ sent_messages = set()
 # ----------- أدوات -----------
 
 def normalize_text(text):
-    return re.sub(r'\s+', ' ', text.lower()).strip()
+    return re.sub(r"\s+", " ", text.lower()).strip()
 
 def get_text_hash(text):
-    return hashlib.md5(text.encode()).hexdigest()
+    return hashlib.md5(text.encode("utf-8")).hexdigest()
 
 # ----------- تنظيف -----------
 
@@ -54,65 +52,125 @@ def clean_text(text):
 
     text = re.sub(r'https?://\S+|www\.\S+|t\.me/\S+|@\w+', '', text)
 
+    blocked_words = ["تابعنا", "اشترك", "انضم", "المزيد"]
     lines = text.split('\n')
-    cleaned = [l for l in lines if not any(w in l for w in ["تابعنا", "اشترك", "انضم", "المزيد"])]
+    cleaned = [line for line in lines if not any(word in line for word in blocked_words)]
 
-    return re.sub(r'\n+', '\n', '\n'.join(cleaned)).strip()
+    text = '\n'.join(cleaned)
+    text = re.sub(r'\n+', '\n', text).strip()
+    return text
 
 # ----------- ترجمة -----------
 
 def translate_if_persian(text):
     try:
         if re.search(r'[\u0600-\u06FF]', text):
-            return GoogleTranslator(source='auto', target='ar').translate(text[:400])
-    except:
-        pass
+            translated = GoogleTranslator(source='auto', target='ar').translate(text[:1200])
+            if translated and translated.strip():
+                return translated.strip()
+    except Exception as e:
+        print("❌ Translation Error:", e)
     return text
 
 # ----------- إزالة التكرار -----------
 
 def remove_repeated_words(text):
+    # يحذف التكرار المتتالي فقط
     words = text.split()
-    result = []
-    seen = set()
+    if not words:
+        return text
 
-    for w in words:
-        if w not in seen:
-            result.append(w)
-            seen.add(w)
+    result = [words[0]]
+    for word in words[1:]:
+        if word != result[-1]:
+            result.append(word)
 
     return " ".join(result)
+
+# ----------- تنظيف خفيف بعد الصياغة -----------
+
+def post_cleanup(text):
+    text = re.sub(r'\s+', ' ', text).strip()
+    text = re.sub(r'([،.])\1+', r'\1', text)
+    return text
 
 # ----------- 🧠 إعادة الصياغة -----------
 
 def rewrite_news(text):
     try:
-        prompt = f"""
-أعد كتابة الخبر التالي بالكامل بأسلوب جديد ومختلف 100%.
-غير جميع الجمل والتراكيب مع الحفاظ على نفس المعنى.
-اجعله احترافي ومختصر وخالي من التكرار:
+        print("🧠 جاري إعادة الصياغة...")
+        print("📝 قبل الصياغة:", text[:300])
 
+        prompt = f"""
+أعد صياغة الخبر التالي بالكامل بصياغة عربية إخبارية جديدة ومختلفة بوضوح.
+الشروط:
+- غيّر الأسلوب والتراكيب والجمل بشكل واضح
+- حافظ على المعنى فقط
+- لا تنقل الجمل نفسها
+- لا تضف تحليلات أو آراء
+- اجعل النص مختصرًا ومهنيًا
+- لا تكرر الكلمات أو العبارات
+- أخرج النص النهائي فقط دون مقدمات
+
+الخبر:
 {text}
 """
 
         response = ai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "أنت محرر أخبار محترف"},
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": "أنت محرر أخبار عربي محترف، تعيد كتابة الخبر بصياغة جديدة وواضحة ومناسبة للنشر."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
             ],
-            max_tokens=200
+            temperature=0.9,
+            max_tokens=300
         )
 
         result = response.choices[0].message.content.strip()
 
-        if result:
-            return result
-        else:
+        if not result:
+            print("⚠️ AI رجّع نصًا فارغًا")
             return text
 
+        result = post_cleanup(result)
+
+        print("📝 بعد الصياغة:", result[:300])
+
+        # إذا الصياغة شبه الأصل جدًا نرجع نحاول مرة ثانية
+        if normalize_text(result) == normalize_text(text):
+            print("⚠️ الصياغة مطابقة تقريبًا للأصل، إعادة محاولة...")
+            response = ai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "أنت محرر أخبار عربي محترف. ممنوع إعادة النص كما هو. يجب تغيير الصياغة بوضوح."
+                    },
+                    {
+                        "role": "user",
+                        "content": f"أعد كتابة هذا الخبر بصياغة مختلفة بشكل واضح جدًا مع الحفاظ على المعنى فقط:\n\n{text}"
+                    }
+                ],
+                temperature=1.0,
+                max_tokens=300
+            )
+
+            second_result = response.choices[0].message.content.strip()
+            if second_result:
+                second_result = post_cleanup(second_result)
+                print("📝 بعد المحاولة الثانية:", second_result[:300])
+                return second_result
+
+        return result
+
     except Exception as e:
-        print("AI Error:", e)
+        print("❌ AI Error:", e)
         return text
 
 # ----------- المعالج -----------
@@ -127,39 +185,49 @@ async def handler(event):
 
         original = event.message.text or event.message.caption or ""
 
+        if not original.strip():
+            print("⚠️ لا يوجد نص في الرسالة")
+            return
+
         text = clean_text(original)
         text = translate_if_persian(text)
         text = remove_repeated_words(text)
 
-        if not text:
+        if not text.strip():
+            print("⚠️ النص فارغ بعد التنظيف")
             return
 
-        # 🧠 إعادة الصياغة
-        text = rewrite_news(text)
+        rewritten_text = rewrite_news(text)
 
-        # 🔁 منع تكرار نفس الخبر
-        text_hash = get_text_hash(normalize_text(text))
+        if not rewritten_text.strip():
+            print("⚠️ النص النهائي فارغ")
+            return
+
+        rewritten_text = remove_repeated_words(rewritten_text)
+        rewritten_text = post_cleanup(rewritten_text)
+
+        # منع التكرار اعتمادًا على النص النهائي
+        text_hash = get_text_hash(normalize_text(rewritten_text))
 
         if text_hash in sent_messages:
-            print("⚠️ مكرر")
+            print("⚠️ خبر مكرر")
             return
 
         sent_messages.add(text_hash)
 
         for ch in CHANNELS:
             if event.message.media:
-                await client.send_file(ch, event.message.media, caption=text)
+                await client.send_file(ch, event.message.media, caption=rewritten_text)
             else:
-                await client.send_message(ch, text, link_preview=False)
+                await client.send_message(ch, rewritten_text, link_preview=False)
 
         print("📡 تم النشر")
 
     except Exception as e:
-        print("❌ خطأ:", e)
+        print("❌ Handler Error:", e)
 
 # ----------- تشغيل -----------
 
-print("🚀 البوت شغال (AI + بدون تكرار + صياغة جديدة)")
-
+print("🚀 البوت شغال (AI + إعادة صياغة فعلية)")
 client.start()
 client.run_until_disconnected()
