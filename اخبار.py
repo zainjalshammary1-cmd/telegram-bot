@@ -93,12 +93,6 @@ def rewrite_text(text):
 @client.on(events.NewMessage(chats=source_channels))
 async def handler(event):
     try:
-        unique_id = f"{event.chat_id}_{event.message.id}"
-
-        if unique_id in sent_messages:
-            return
-        sent_messages.add(unique_id)
-
         text = event.message.text or event.message.caption or ""
 
         text = clean_text(text)
@@ -109,6 +103,18 @@ async def handler(event):
         if not text:
             return
 
+        # 🧠 توليد بصمة للخبر
+        normalized = normalize_text(text)
+        text_hash = get_text_hash(normalized)
+
+        # 🚫 منع التكرار بين القنوات
+        if text_hash in sent_messages:
+            print("⚠️ خبر مشابه - تم تجاهله")
+            return
+
+        sent_messages.add(text_hash)
+
+        # 📡 النشر
         for ch in CHANNELS:
             if event.message.photo:
                 await client.send_file(ch, event.message.photo, caption=text)
@@ -117,7 +123,7 @@ async def handler(event):
             else:
                 await client.send_message(ch, text, link_preview=False)
 
-        print("📡 تم نشر خبر")
+        print("📡 تم نشر خبر جديد")
 
     except Exception as e:
         print("❌ خطأ:", e)
