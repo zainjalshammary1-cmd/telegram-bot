@@ -4,6 +4,7 @@ asyncio.set_event_loop(asyncio.new_event_loop())
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from deep_translator import GoogleTranslator
+from openai import OpenAI
 import re
 import hashlib
 import os
@@ -14,6 +15,7 @@ api_id = 30540427
 api_hash = "eaa19d4ac276f691b14618bdf917b5c8"
 
 SESSION = os.getenv("SESSION")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # حط مفتاحك هنا
 
 CHANNELS = ["@Arash_Insight"]
 
@@ -30,6 +32,7 @@ source_channels = [
 ]
 
 client = TelegramClient(StringSession(SESSION), api_id, api_hash)
+ai_client = OpenAI(api_key=OPENAI_API_KEY)
 
 sent_messages = set()
 
@@ -73,6 +76,32 @@ def remove_repeated_words(text):
             result.append(w)
     return " ".join(result)
 
+# ----------- 🧠 إعادة الصياغة -----------
+
+def rewrite_news(text):
+    try:
+        prompt = f"""
+أعد صياغة الخبر التالي بأسلوب وكالة إخبارية عربية احترافية.
+اجعله مختصر وواضح وبدون مبالغة أو تعليق:
+
+{text}
+"""
+
+        response = ai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "أنت محرر أخبار محترف"},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=200
+        )
+
+        return response.choices[0].message.content.strip()
+
+    except Exception as e:
+        print("AI Error:", e)
+        return text
+
 # ----------- المعالج -----------
 
 @client.on(events.NewMessage(chats=source_channels))
@@ -92,6 +121,9 @@ async def handler(event):
 
         if not text:
             return
+
+        # 🧠 إعادة الصياغة
+        text = rewrite_news(text)
 
         text_hash = get_text_hash(normalize_text(original))
 
