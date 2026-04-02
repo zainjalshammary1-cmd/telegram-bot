@@ -25,9 +25,7 @@ source_channels = [
     "@manarbreaking",
     "@media_operations_center",
     "@altaifaalmansoora",
-    "@StateMediaTeamForums",
-    "@muraselon",
-    "@jbt_313"
+    "@muraselon"
 ]
 
 client = TelegramClient("session", api_id, api_hash)
