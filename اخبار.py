@@ -28,7 +28,7 @@ threading.Thread(target=run).start()
 api_id = 30540427
 api_hash = "eaa19d4ac276f691b14618bdf917b5c8"
 
-SESSION = os.getenv("SESSION")  # 🔥 من Railway
+SESSION = os.getenv("SESSION")
 
 CHANNELS = ["@Arash_Insight"]
 
@@ -79,7 +79,7 @@ def translate_if_persian(text):
         pass
     return text
 
-# ----------- تحسين -----------
+# ----------- إزالة التكرار -----------
 
 def remove_repeated_words(text):
     words, result = text.split(), []
@@ -88,8 +88,36 @@ def remove_repeated_words(text):
             result.append(w)
     return " ".join(result)
 
+# ----------- إعادة صياغة احترافية -----------
+
 def rewrite_text(text):
-    return text[:300] + "..." if len(text) > 300 else text
+    if not text:
+        return ""
+
+    text = text.strip()
+
+    urgent_keywords = ["قصف", "انفجار", "هجوم", "اغتيال", "اشتباكات", "صاروخ", "عاجل"]
+
+    is_urgent = any(word in text for word in urgent_keywords)
+
+    if len(text) > 300:
+        text = text[:300]
+
+    if is_urgent:
+        formatted = f"""🚨 عاجل
+
+📍 أفادت مصادر بــ:
+{text}
+
+⏳ التفاصيل قيد المتابعة
+"""
+    else:
+        formatted = f"""📰 متابعة
+
+{text}
+"""
+
+    return formatted.strip()
 
 # ----------- المعالج -----------
 
