@@ -17,8 +17,10 @@ api_hash = "eaa19d4ac276f691b14618bdf917b5c8"
 SESSION = os.getenv("SESSION")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-CHANNELS =  ["@shabab_alislam"]
-["@Arash_Insight"],
+CHANNELS =  [
+    "@shabab_alislam",
+    "@Arash_Insight"
+]
 source_channels = [
     "@iran_military_capabilities",
     "@almayadeen",
