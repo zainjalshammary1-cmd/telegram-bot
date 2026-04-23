@@ -18,7 +18,7 @@ SESSION = os.getenv("SESSION")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 CHANNELS =  [
-    "@shabab_alislam",
+    
     "@Arash_Insight"
 ]
 source_channels = [
